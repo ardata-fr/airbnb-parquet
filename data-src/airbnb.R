@@ -4,28 +4,10 @@ library(httr2)
 library(future)
 library(future.apply)
 library(here)
-tmp_dir <- here("data")
 
-doc <- read_html("http://insideairbnb.com/get-the-data")
-all_links <- xml_find_all(doc, '//*[@id="gatsby-focus-wrapper"]/div/div[2]/table//a') |>
-  xml_attr("href")
-data_infos <- data.frame(
-  url = grep("/data/", all_links, fixed = TRUE, value = TRUE)
-) |>
-  mutate(
-    path = sapply(url, function(z) url_parse(z)$path)
-  ) |>
-  filter(
-    str_count(path, "/") == 6
-  ) |>
-  separate(path,
-    into = c("dummy", "country", "state", "city", "date", "data", "basename"),
-    sep = "/"
-  ) |>
-  select(-dummy) |>
-  filter(city %in% c("amsterdam", "athens", "barcelona", "berlin", "bordeaux", "brussels", "dublin", "florence"))
+# funs -----
 
-as_filename <- function(url, country, state, city, date) {
+as_filename <- function(url, country, state, city, date, tmp_dir) {
   filename <- paste(date, country, state, city, sep = "-")
   filename <- paste0(filename, "-", gsub(".csv.gz", "", basename(url), fixed = TRUE), ".parquet")
   filename <- file.path(tmp_dir, filename)
@@ -114,13 +96,52 @@ read_listing <- function(url) {
     )
   )
 }
+read_calendar <- function(url) {
+  read_csv(
+    file = url,
+    col_types = cols(
+      listing_id = col_character(),
+      date = col_date(format = ""),
+      available = col_logical(),
+      price = col_skip(),
+      adjusted_price = col_character(),
+      minimum_nights = col_skip(),
+      maximum_nights = col_skip()
+    )
+  )
+}
+
+# read web page ----
+
+doc <- read_html("http://insideairbnb.com/get-the-data")
+all_links <- xml_find_all(doc, '//*[@id="gatsby-focus-wrapper"]/div/div[2]/table//a') |>
+  xml_attr("href")
+data_infos <- data.frame(
+  url = grep("/data/", all_links, fixed = TRUE, value = TRUE)
+) |>
+  mutate(
+    path = sapply(url, function(z) url_parse(z)$path)
+  ) |>
+  filter(
+    str_count(path, "/") == 6
+  ) |>
+  separate(path,
+           into = c("dummy", "country", "state", "city", "date", "data", "basename"),
+           sep = "/"
+  ) |>
+  select(-dummy) |>
+  filter(city %in% c("amsterdam", "athens", "barcelona", "berlin", "bordeaux", "brussels", "dublin", "florence"))
+
+# listings ----
+
+tmp_dir <- here("data/listings")
 dir.create(tmp_dir, showWarnings = FALSE, recursive = TRUE)
 
 plan("future::multisession")
 data_listings <- data_infos |> filter(basename(url) %in% "listings.csv.gz")
 future_mapply(
   FUN = function(url, country, state, city, date, data, basename) {
-    filename <- as_filename(url, country, state, city, date)
+    filename <- as_filename(url, country, state, city, date, tmp_dir)
 
     if (!file.exists(filename)) {
       message(url)
@@ -142,24 +163,16 @@ future_mapply(
   basename = data_listings$basename
 )
 
-read_calendar <- function(url) {
-  read_csv(
-    file = url,
-    col_types = cols(
-      listing_id = col_character(),
-      date = col_date(format = ""),
-      available = col_logical(),
-      price = col_skip(),
-      adjusted_price = col_character(),
-      minimum_nights = col_skip(),
-      maximum_nights = col_skip()
-    )
-  )
-}
+
+# calendars ----
+
+tmp_dir <- here("data/calendars")
+dir.create(tmp_dir, showWarnings = FALSE, recursive = TRUE)
+
 data_calendars <- data_infos |> filter(basename(url) %in% "calendar.csv.gz")
 future_mapply(
   FUN = function(url, country, state, city, date, data, basename) {
-    filename <- as_filename(url, country, state, city, date)
+    filename <- as_filename(url, country, state, city, date, tmp_dir)
 
     if (!file.exists(filename)) {
       message(url)
