@@ -130,7 +130,11 @@ data_infos <- data.frame(
            sep = "/"
   ) |>
   select(-dummy) |>
-  filter(city %in% c("amsterdam", "athens", "barcelona", "berlin", "bordeaux", "brussels", "dublin", "florence"))
+  filter(city %in% c("amsterdam", "athens", "barcelona",
+                     "berlin", "bordeaux", "brussels",
+                     "dublin", "florence", "paris",
+                     "crete", "copenhagen", "geneva",
+                     "istanbul", "lisbon", "london"))
 
 # listings ----
 
